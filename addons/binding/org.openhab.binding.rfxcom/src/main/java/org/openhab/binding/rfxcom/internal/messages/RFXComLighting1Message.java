@@ -10,8 +10,10 @@ package org.openhab.binding.rfxcom.internal.messages;
 
 import static org.openhab.binding.rfxcom.RFXComBindingConstants.*;
 
+import org.eclipse.smarthome.core.library.types.IncreaseDecreaseType;
 import org.eclipse.smarthome.core.library.types.OnOffType;
 import org.eclipse.smarthome.core.library.types.OpenClosedType;
+import org.eclipse.smarthome.core.types.Command;
 import org.eclipse.smarthome.core.types.State;
 import org.eclipse.smarthome.core.types.Type;
 import org.openhab.binding.rfxcom.internal.exceptions.RFXComException;
@@ -79,6 +81,8 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
     public Commands command;
     public boolean group;
 
+    private static byte[] lastUnit = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
     public RFXComLighting1Message() {
         super(PacketType.LIGHTING1);
     }
@@ -110,8 +114,17 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
 
         if ((command == Commands.GROUP_ON) || (command == Commands.GROUP_OFF)) {
             unitCode = 0;
+        } else if ((data[5] == 0) && ((command == Commands.DIM) || (command == Commands.BRIGHT))) {
+            // SS13 switches broadcast DIM/BRIGHT to X0 and the dimmers ignore
+            // the message unless the last X<n> ON they saw was for them. So we
+            // redirect an incoming broadcast DIM/BRIGHT to the correct item
+            // based on the last X<n> we saw or sent.
+            unitCode = lastUnit[(int)houseCode - (int)'A'];
         } else {
             unitCode = data[5];
+            if (command == Commands.ON) {
+                lastUnit[(int)houseCode - (int)'A'] = unitCode;
+            }
         }
 
         signalLevel = (byte) ((data[7] & 0xF0) >> 4);
@@ -129,7 +142,18 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
         data[2] = subType.toByte();
         data[3] = seqNbr;
         data[4] = (byte) houseCode;
-        data[5] = unitCode;
+        // When an SS13 sends a DIM/BRIGHT it broadcasts to the all-units code (X0)
+        // and it is up to the dimmers to ignore the message if the last X<n> they
+        // saw wasn't for them. Sending to an actual X<n> may or may not work.
+        // It is untested against _any_ dimmer never mind all so we stick to doing
+        // the same as an SS13. At least for now. Using an explicit X<n> would be
+        // better (if it works) because X10 RF and PLM are lossy and different
+        // modules may have seen different traffic.
+        if ((command == Commands.DIM) || (command == Commands.BRIGHT)) {
+            data[5] = 0;
+        } else {
+            data[5] = unitCode;
+        }
         data[6] = command.toByte();
         data[7] = (byte) ((signalLevel & 0x0F) << 4);
 
@@ -142,6 +166,41 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
     }
 
     @Override
+    public Command convertToCommand(String channelId) throws RFXComUnsupportedChannelException {
+        switch (channelId) {
+            case CHANNEL_COMMAND:
+                switch (command) {
+                    case OFF:
+                    case GROUP_OFF:
+                        return OnOffType.OFF;
+                        break;
+
+                    case ON:
+                    case GROUP_ON:
+                        return OnOffType.ON;
+                        break;
+
+                    case DIM:
+                        return IncreaseDecreaseType.DECREASE;
+                        break;
+
+                    case BRIGHT:
+                        return IncreaseDecreaseType.INCREASE;
+                        break;
+
+                    case CHIME:
+                        return OnOffType.ON;
+                        break;
+
+                    default:
+                        throw new RFXComUnsupportedChannelException("Channel " + channelId + " does not accept " + command);
+                }
+
+            default:
+                return super.convertToCommand(channelId);
+        }
+    }
+
     public State convertToState(String channelId) throws RFXComUnsupportedChannelException {
         switch (channelId) {
             case CHANNEL_COMMAND:
@@ -160,7 +219,7 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
                         return OnOffType.ON;
 
                     default:
-                        throw new RFXComUnsupportedChannelException("Can't convert " + command + " for " + channelId);
+                        throw new RFXComUnsupportedChannelException("Channel " + channelId + " does not accept " + command);
                 }
 
             case CHANNEL_CONTACT:
@@ -179,11 +238,11 @@ public class RFXComLighting1Message extends RFXComDeviceMessageImpl<RFXComLighti
                         return OpenClosedType.OPEN;
 
                     default:
-                        throw new RFXComUnsupportedChannelException("Can't convert " + command + " for " + channelId);
+                        throw new RFXComUnsupportedChannelException("Channel " + channelId + " does not accept " + command);
                 }
 
             default:
-                return super.convertToState(channelId);
+                throw new RFXComUnsupportedChannelException("Channel " + channelId + " is not relevant here");
         }
     }
 
