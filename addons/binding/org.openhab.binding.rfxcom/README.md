@@ -2,7 +2,8 @@
 
 This binding integrates large number of sensors and actuators from several different manufactures through [RFXCOM transceivers](http://www.rfxcom.com).
 
-RFXCOM transceivers support RF 433 Mhz protocols like: 
+RFXCOM transceivers support RF 433 Mhz protocols like:
+
 * HomeEasy 
 * Cresta 
 * X10 
@@ -14,15 +15,17 @@ RFXCOM transceivers support RF 433 Mhz protocols like:
 
 See the RFXtrx User Guide from [RFXCOM](http://www.rfxcom.com) for the complete list of supported sensors and devices as well as firmware update announcements.
 
-
 ## Supported Things
 
 This binding supports the RFXtrx433E and RFXtrx315 transceivers and the RFXrec433 receiver as bridges for accessing different sensors and actuators.
 
-This binding currently supports following packet types:
+This binding currently supports following things / message types:
 
 * Blinds1
-* Curtain1 
+* Chime
+* CurrentEnergy
+* Curtain1
+* DateTime
 * Energy
 * Humidity
 * Lighting1
@@ -33,18 +36,19 @@ This binding currently supports following packet types:
 * Rain
 * Rfy
 * Security1
-* Temperature
+* TemperatureHumidityBarometric
 * TemperatureHumidity
+* Temperature
+* TemperatureRain
 * Thermostat1
 * Undecoded
 * Wind
 
-
 ## Discovery
 
-The transceivers/receivers are automatically discovered by the JD2XX library and put in the Inbox. 
+The transceivers/receivers should be automatically discovered by the JD2XX library and put in the Inbox.
 
-Apple OS X note:
+### Apple OS X note:
 
 Apple provides build-in FTDI drivers for OS X, which need to be disabled to get JD2XX work properly.
 
@@ -60,14 +64,101 @@ FTDI driver can be enabled by the following command
 sudo kextload -b com.apple.driver.AppleUSBFTDI
 ```
 
+### Troubleshooting
+
 If you have any problems with JD2XX or you don't want to disable FTDI driver on OS X, you can also configure RFXCOM transceivers/receivers manually.
 
-You can also use an RFXCOM device over TCP/IP. To start a TCP server for an RFXCOM device, you can use socat:
-```
-socat tcp-listen:10001,fork,reuseaddr file:/dev/ttyUSB0,raw
-``` 
+To do that via the PaperUI, manually add the generic RFXCOM device named `RFXCOM USB Transceiver`, with the description "This is universal RFXCOM transceiver bridge for manual configuration purposes."
 
 After the bridge is configured and the transceiver receives a message from any sensor or actuator, the device is put in the Inbox. Because RFXCOM communication is a one way protocol, receiver actuators can't be discovered automatically.
+
+## Bridge Configuration
+
+| Applies to                        | Parameter Label                 | Parameter ID           | Description                                                              | Required | Default |
+|-----------------------------------|---------------------------------|------------------------|--------------------------------------------------------------------------|----------|---------|
+| all                               | Transceiver type                | transceiverType        | Type of the transceiver                                                  | false    |         |
+| all                               | Disable discovery               | disableDiscovery       | Prevent unknown devices from being added to the inbox                    | true     | false   |
+| all                               | Skip transceiver configuration  | ignoreConfig           | Do not send config. command, other config will be ignored                | true     | true    |
+| all                               | RFXCOM transceiver mode         | setMode                | Config. command as hexadec. (28 chars). If set, other config is ignored. | false    |         |
+| all                               | Transmit Power                  | transmitPower          | Transmit power in dBm, between -18dBm and +10dBm.                        | false    | -18     |
+| all                               | Enable Undecoded                | enableUndecoded        | Enable protocol Undecoded                                                | false    |         |
+| all except RFXtrx315              | Enable Imagintronix / Opus      | enableImagintronixOpus | Enable protocol Imagintronix / Opus                                      | false    |         |
+| all except RFXtrx315              | Enable Byron SX                 | enableByronSX          | Enable protocol Byron SX                                                 | false    |         |
+| all except RFXtrx315              | Enable RSL                      | enableRSL              | Enable protocol RSL                                                      | false    |         |
+| all except RFXtrx315              | Enable Lighting4                | enableLighting4        | Enable protocol Lighting4                                                | false    |         |
+| all except RFXtrx315              | Enable FineOffset / Viking      | enableFineOffsetViking | Enable protocol FineOffset / Viking                                      | false    |         |
+| all except RFXtrx315              | Enable Rubicson                 | enableRubicson         | Enable protocol Rubicson / Lacrosse / Banggood                           | false    |         |
+| all except RFXtrx315              | Enable AEBlyss                  | enableAEBlyss          | Enable protocol AEBlyss                                                  | false    |         |
+| all except RFXtrx315              | Enable Blinds T1                | enableBlindsT1T2T3T4   | Enable protocol Blinds T1                                                | false    |         |
+| all except RFXtrx315              | Enable Blinds T0                | enableBlindsT0         | Enable protocol Blinds T0                                                | false    |         |
+| all except RFXtrx315              | Enable ProGuard                 | enableProGuard         | Enable protocol ProGuard                                                 | false    |         |
+| all except RFXtrx315              | Enable La Crosse                | enableLaCrosse         | Enable protocol La Crosse                                                | false    |         |
+| all except RFXtrx315              | Enable Hideki / UPM             | enableHidekiUPM        | Enable protocol Hideki / UPM                                             | false    |         |
+| all except RFXtrx315              | Enable AD / LightwaveRF         | enableADLightwaveRF    | Enable protocol AD / LightwaveRF                                         | false    |         |
+| all except RFXtrx315              | Enable Mertik                   | enableMertik           | Enable protocol Mertik                                                   | false    |         |
+| all                               | Enable Visonic                  | enableVisonic          | Enable protocol Visonic                                                  | false    |         |
+| all except RFXtrx315              | Enable ATI                      | enableATI              | Enable protocol ATI / cartelectronic                                     | false    |         |
+| all except RFXtrx315              | Enable Oregon Scientific        | enableOregonScientific | Enable protocol Oregon Scientific                                        | false    |         |
+| all except RFXtrx315              | Enable Meiantech                | enableMeiantech        | Enable protocol Meiantech                                                | false    |         |
+| all except RFXtrx315              | Enable HomeEasy EU              | enableHomeEasyEU       | Enable protocol HomeEasy EU                                              | false    |         |
+| all except RFXtrx315              | Enable AC                       | enableAC               | Enable protocol AC                                                       | false    |         |
+| all except RFXtrx315              | Enable ARC                      | enableARC              | Enable protocol ARC                                                      | false    |         |
+| all                               | Enable X10                      | enableX10              | Enable protocol X10                                                      | false    |         |
+| bridge                            | Serial port                     | serialPort             | Serial port for manual configuration                                     | true     |         |
+| RFXtrx315 / RFXrec433 / RFXtrx433 | Serial number                   | bridgeId               | Serial number of the RFXCOM (FTDI) device                                | true     |         |
+| tcpbridge                         | Host                            | host                   | Hostname / ip address of device                                          | true     |         |
+| tcpbridge                         | Port                            | port                   | Port of device                                                           | true     |         |
+
+## Thing Configuration
+
+Available configuration parameters are:
+
+| Applies to | Parameter Label | Parameter ID | Description                                                          | Required | Default |
+|------------|-----------------|--------------|----------------------------------------------------------------------|----------|---------|
+| All things | Device ID       | deviceId     | (Unique) id of the device, for example "100001.1", "B.8" or "286169" | true     |         |
+| All things | Sub type        | subType      | Sub type, note that every thing-type has its own sub types           | true     |         |
+| Lighting4  | Pulse           | pulse        | Pulse length used by the device, only used when sending              | false    | 350     |
+| Lighting4  | On command ID   | onCommandId  | Id of the command which should be send to turn the device ON         | false    | 1       |
+| Lighting4  | Off command ID  | offCommandId | Id of the command which should be send to turn the device OFF        | false    | 4       |
+
+## Channels
+
+This binding currently supports following channels:
+
+| Channel Type ID | Item Type     | Description                                                |
+|-----------------|---------------|------------------------------------------------------------|
+| batteryLevel    | Number        | Battery level.                                             |
+| chimesound      | Number        | Id of the chime sound                                      |
+| command         | Switch        | Command channel.                                           |
+| commandId       | String        | Id of the command.                                         |
+| contact         | Contact       | Contact channel.                                           |
+| datetime        | DateTime      | DateTime channel.                                          |
+| dimmingLevel    | Dimmer        | Dimming level channel.                                     |
+| humidity        | Number        | Relative humidity level in percentages.                    |
+| humidityStatus  | String        | Current humidity status.                                   |
+| instantamp      | Number        | Instant current in Amperes.                                |
+| instantpower    | Number        | Instant power consumption in Watts.                        |
+| mood            | Number        | Mood channel.                                              |
+| motion          | Switch        | Motion detection sensor state.                             |
+| rainRate        | Number        | Rain fall rate in millimeters per hour.                    |
+| rainTotal       | Number        | Total rain in millimeters.                                 |
+| rawMessage      | String        | Hexadecimal string of the raw RF message.                  |
+| rawPayload      | String        | Hexadecimal string of the message payload, without header. |
+| setpoint        | Number        | Requested temperature.                                     |
+| shutter         | Rollershutter | Shutter channel.                                           |
+| signalLevel     | Number        | Received signal strength level.                            |
+| status          | String        | Status channel.                                            |
+| temperature     | Number        | Current temperature in degree Celsius.                     |
+| totalUsage      | Number        | Used energy in Watt hours.                                 |
+| totalAmpHour    | Number        | Used "energy" in ampere-hours.                             |
+| windDirection   | Number        | Wind direction in degrees.                                 |
+| windSpeed       | Number        | Average wind speed in meters per second.                   |
+
+## Full example
+
+### Thing files
+
+#### Default situation
 
 Both bridges and sensor/actuators are easy to configure from the Paper UI. However, you can configure things manually in the thing file, for example:
 
@@ -77,12 +168,26 @@ Bridge rfxcom:bridge:usb0 [ serialPort="/dev/tty.usbserial-06VVEG1Y" ] {
 }
 ```
 
+#### RFXCOM over TCP/IP
+
+You can also use an RFXCOM device over TCP/IP. To start a TCP server for an RFXCOM device, you can use socat:
+
+```
+socat tcp-listen:10001,fork,reuseaddr file:/dev/ttyUSB0,raw
+```
+
 A TCP bridge, for use with socat on a remote host, can be configured like this:
 
 ```
 Bridge rfxcom:tcpbridge:sunflower [ host="sunflower", port=10001 ] {
     Thing lighting2 100001_1 [deviceId="100001.1", subType="AC"]
 }
+```
+
+### Item files
+
+```
+Switch Switch {channel="rfxcom:lighting2:usb0:100001_1:command"}
 ```
 
 ## Protocol specific details
@@ -97,7 +202,7 @@ For a usb attached RFXCOM on Windows the configuration could look like this (not
 
 ```
 Bridge rfxcom:bridge:238adf67 [ serialPort="COM4" ] {
-    Thing lighting4 17745 [deviceId="17745", subType="PT2262", onCommandId=7, offCommandId=4, pulse=800]
+    Thing lighting4 17745  [deviceId="17745",  subType="PT2262", onCommandId=7, offCommandId=4, pulse=800]
     Thing lighting4 motion [deviceId="286169", subType="PT2262", onCommandId=9, pulse=392]
 }
 ```
@@ -105,8 +210,8 @@ Bridge rfxcom:bridge:238adf67 [ serialPort="COM4" ] {
 Your items file could look like this:
 
 ```
-Switch Switch {channel="rfxcom:lighting4:238adf67:17745:command"}
-Number SwitchCommandId "Command ID [%d]" {channel="rfxcom:lighting4:238adf67:17745:commandId"}
+Switch Switch                               {channel="rfxcom:lighting4:238adf67:17745:command"}
+Number SwitchCommandId "Command ID [%d]"    {channel="rfxcom:lighting4:238adf67:17745:commandId"}
 ```
 
 And if you want random actions on your relay you could for example do like this:
@@ -120,34 +225,3 @@ rule "Set random relay variations"
         SwitchCommandId.sendCommand((Math::random * 15.9).intValue)
 end
 ```
-
-## Channels
-
-This binding currently supports following channels:
-
-| Channel Type ID | Item Type     | Description                                                |
-|-----------------|---------------|------------------------------------------------------------|
-| batteryLevel    | Number        | Battery level.                                             |
-| command         | Switch        | Command channel.                                           |
-| commandId       | String        | Id of the command.                                         |
-| contact         | Contact       | Contact channel.                                           |
-| dimmingLevel    | Dimmer        | Dimming level channel.                                     |
-| humidity        | Number        | Relative humidity level in percentages.                    |
-| humidityStatus  | String        | Current humidity status.                                   |
-| instantamp      | Number        | Instant current in Amperes.                                |
-| instantpower    | Number        | Instant power consumption in Watts.                        |
-| status          | String        | Status channel.                                            |
-| setpoint        | Number        | Requested temperature.                                     |
-| mood            | Number        | Mood channel.                                              |
-| motion          | Switch        | Motion detection sensor state.                             |
-| rainRate        | Number        | Rain fall rate in millimeters per hour.                    |
-| rainTotal       | Number        | Total rain in millimeters.                                 |
-| rawMessage      | String        | Hexadecimal string of the raw RF message.                  |
-| rawPayload      | String        | Hexadecimal string of the message payload, without header. |
-| shutter         | Rollershutter | Shutter channel.                                           |
-| signalLevel     | Number        | Received signal strength level.                            |
-| temperature     | Number        | Current temperature in degree Celsius.                     |
-| totalUsage      | Number        | Used energy in Watt hours.                                 |
-| totalAmpHour    | Number        | Used "energy" in ampere-hours.                             |
-| windDirection   | Number        | Wind direction in degrees.                                 |
-| windSpeed       | Number        | Average wind speed in meters per second.                   |
