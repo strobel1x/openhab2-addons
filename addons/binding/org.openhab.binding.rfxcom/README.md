@@ -123,7 +123,7 @@ Available configuration parameters are:
 
 ## Channels
 
-This binding currently supports following channels:
+This binding currently supports following channel types:
 
 | Channel Type ID | Item Type     | Description                                                |
 |-----------------|---------------|------------------------------------------------------------|
@@ -192,7 +192,56 @@ Switch Switch {channel="rfxcom:lighting2:usb0:100001_1:command"}
 
 ## Protocol specific details
 
+### Blinds1
+
+#### Channels
+
+| name         | Channel Type           | Item type     | Remarks |
+|--------------|------------------------|---------------|---------|
+| command      | command                | Switch        |         |
+| shutter      | shutter                | Rollershutter |         |
+| signalLevel  | system.signal-strength | Number        |         |
+| batteryLevel | system.battery-level   | Number        |         |
+| lowBattery   | system.signal-strength | Switch        |         |
+
+#### Configuration options:
+
+ * deviceId
+ * subType
+    * T0 - RollerTrol, Hasta new
+    * T1 - Hasta old
+    * T2 - A-OK RF01
+    * T3 - A-OK AC114 / AC123
+    * T4 - Raex YR1326
+    * T5 - Media Mount
+    * T6 - DC106 / Rohrmotor24-RMF / Yooda
+    * T7 - Forest
+    * T8 - Chamberlain CS4330CN
+
+#### Examples
+
+tbd
+
 ### Lighting 4
+
+#### Channels
+
+| name         | Channel Type           | Item type | Remarks |
+|--------------|------------------------|-----------|---------|
+| command      | command                | Switch    |         |
+| commandId    | commandId              | Number    |         |
+| signalLevel  | system.signal-strength | Number    |         |
+
+#### Configuration options:
+
+ * deviceId
+ * subType
+    * PT2262
+ * pulse
+ * onCommandId
+ * offCommandId
+
+#### Examples
 
 The support for lighting 4 in RFXCOM is less complete because a lot of different devices use the same chips and can not easily be distinguished.
 
