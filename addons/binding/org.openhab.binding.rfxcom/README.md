@@ -11,46 +11,24 @@ RFXCOM transceivers support RF 433 Mhz protocols like:
 * OWL
 * CoCo (KlikAanKlikUit), 
 * PT2262
-* Oregon etc.
+* Oregon
+* etc.
 
 See the RFXtrx User Guide from [RFXCOM](http://www.rfxcom.com) for the complete list of supported sensors and devices as well as firmware update announcements.
 
-## Supported Things
+## Supported RFXCOM Types
 
 This binding supports the RFXtrx433E and RFXtrx315 transceivers and the RFXrec433 receiver as bridges for accessing different sensors and actuators.
 
-This binding currently supports following things / message types:
-
-* Blinds1
-* Chime
-* CurrentEnergy
-* Curtain1
-* DateTime
-* Energy
-* Humidity
-* Lighting1
-* Lighting2
-* Lighting4
-* Lighting5
-* Lighting6
-* Rain
-* Rfy
-* Security1
-* TemperatureHumidityBarometric
-* TemperatureHumidity
-* Temperature
-* TemperatureRain
-* Thermostat1
-* Undecoded
-* Wind
-
 ## Discovery
 
-The transceivers/receivers should be automatically discovered by the JD2XX library and put in the Inbox.
+The transceivers/receivers may be automatically discovered by the JD2XX library and put in the Inbox or may be configured manually.
 
-### Apple OS X note:
+After the bridge is configured and the transceiver receives a message from any sensor or actuator, the device is put in the Inbox. Because RFXCOM communication is a one way protocol, receiver actuators can't be discovered automatically.
 
-Apple provides build-in FTDI drivers for OS X, which need to be disabled to get JD2XX work properly.
+### Note: Apple OS X
+
+Apple provides built-in FTDI drivers for OS X, which need to be disabled to get JD2XX work properly.
 
 FTDI driver disabling can be done by the following command
 
@@ -64,13 +42,53 @@ FTDI driver can be enabled by the following command
 sudo kextload -b com.apple.driver.AppleUSBFTDI
 ```
 
-### Troubleshooting
+### Note: Linux
 
-If you have any problems with JD2XX or you don't want to disable FTDI driver on OS X, you can also configure RFXCOM transceivers/receivers manually.
+Linux has built-in FTDI drivers, which need to be disabled for JD2XX to take over
 
-To do that via the PaperUI, manually add the generic RFXCOM device named `RFXCOM USB Transceiver`, with the description "This is universal RFXCOM transceiver bridge for manual configuration purposes."
+FTDI drivers can be disabled by blacklisting the ftdi\_sio module in your modprobe config (/etc/modprobe.d/). However this will require ALL FTDI devices to then be accessed via something like JD2XX. If you have, or may acquire, other USB serial devices you will probably prefer to configure your RFXCOM manually.
 
-After the bridge is configured and the transceiver receives a message from any sensor or actuator, the device is put in the Inbox. Because RFXCOM communication is a one way protocol, receiver actuators can't be discovered automatically.
+If you configure the RFXCOM manually note that the serial port that is assigned to it may change if you have more than one USB serial device. On systems using udev (practically all modern Linux systems) you can add a rule to /etc/udev/rules.d/ such as:
+
+```
+SUBSYSTEM=="tty", ATTRS{product}=="RFXtrx433", ATTRS{serial}=="A12LPLW", SYMLINK+="rfxtrx0"
+```
+
+and then you will be able to use /dev/rfxtrx0 as the serial device regardless of what /dev/ttyUSB<n> device has been assigned. (N.B. you can get the product and serial strings to use from the output of dmesg, lsusb or by looking in /sys/)
+
+### Manual Configuration
+
+If you have any problems with JD2XX or you don't want to disable FTDI driver on OS X or Linux, you can also configure RFXCOM transceivers/receivers manually.
+
+To do that via the PaperUI, manually add the generic RFXCOM device named `RFXCOM USB Transceiver`, with the description "This is universal RFXCOM transceiver bridge for manual configuration purposes." You will need to specify at least the serial port which has been assigned to the RFXCOM (see notes above). You may also need to change permissions on the serial port to allow openhab to access it and you may need to tell the java libraries about it by adding a line to &lt;openhab root&gt;/conf/environment such as:
+
+```
+EXTRA\_JAVA\_OPTS="-Dgnu.io.rxtx.SerialPorts=/dev/&lt;device&gt;
+```
+
+Alternatively you can add the RFXCOM using a thing file such as:
+
+```
+Bridge rfxcom:bridge:usb0 [ serialPort="/dev/&lt;device&gt;" ] {
+    _thing definitions_...
+}
+```
+
+#### RFXCOM over TCP/IP
+
+You can also use an RFXCOM device over TCP/IP. To start a TCP server for an RFXCOM device, you can use socat:
+
+```
+socat tcp-listen:10001,fork,reuseaddr file:/dev/ttyUSB0,raw
+```
+
+A TCP bridge, for use with socat on a remote host, can only be configured manually either through the PaperUI by adding an "RFXCOM USB Transceiver over TCP/IP" device or in a thing file like this:
+
+```
+Bridge rfxcom:tcpbridge:sunflower [ host="sunflower", port=10001 ] {
+    Thing lighting2 100001_1 [deviceId="100001.1", subType="AC"]
+}
+```
 
 ## Bridge Configuration
 
@@ -145,101 +163,513 @@ This binding currently supports following channel types:
 | rawMessage      | String        | Hexadecimal string of the raw RF message.                  |
 | rawPayload      | String        | Hexadecimal string of the message payload, without header. |
 | setpoint        | Number        | Requested temperature.                                     |
-| shutter         | Rollershutter | Shutter channel.                                           |
+| shutter         | Rollershutter | Shutter/blind channel.                                     |
 | signalLevel     | Number        | Received signal strength level.                            |
 | status          | String        | Status channel.                                            |
 | temperature     | Number        | Current temperature in degree Celsius.                     |
 | totalUsage      | Number        | Used energy in Watt hours.                                 |
 | totalAmpHour    | Number        | Used "energy" in ampere-hours.                             |
+| uv              | Number        | Current UV level.                                          |
 | windDirection   | Number        | Wind direction in degrees.                                 |
-| windSpeed       | Number        | Average wind speed in meters per second.                   |
+| windSpeed       | Number        | Wind speed in meters per second.                           |
 
 ## Full example
 
 ### Thing files
 
-#### Default situation
-
-Both bridges and sensor/actuators are easy to configure from the Paper UI. However, you can configure things manually in the thing file, for example:
+Sensors/actuators are easy to configure through the PaperUI. However, if you used a thing file for your RFXCOM you can also configure them manually there as well, for example:
 
 ```
-Bridge rfxcom:bridge:usb0 [ serialPort="/dev/tty.usbserial-06VVEG1Y" ] {
-    Thing lighting2 100001_1 [deviceId="100001.1", subType="AC"]
-}
-```
-
-#### RFXCOM over TCP/IP
-
-You can also use an RFXCOM device over TCP/IP. To start a TCP server for an RFXCOM device, you can use socat:
-
-```
-socat tcp-listen:10001,fork,reuseaddr file:/dev/ttyUSB0,raw
-```
-
-A TCP bridge, for use with socat on a remote host, can be configured like this:
-
-```
-Bridge rfxcom:tcpbridge:sunflower [ host="sunflower", port=10001 ] {
-    Thing lighting2 100001_1 [deviceId="100001.1", subType="AC"]
+Bridge rfxcom:bridge:usb0 [ serialPort="/dev/&lt;device&gt;" ] {
+    Thing lighting2 100001_1 [ deviceId="100001.1", subType="AC" ]
 }
 ```
 
 ### Item files
 
+Items may be created through PaperUI or add using item files in which you add a channel parameter specifying the bridge's name, the thing ID and channel that the item should be linked to, for example:
+
 ```
 Switch Switch {channel="rfxcom:lighting2:usb0:100001_1:command"}
 ```
 
-## Protocol specific details
+## Supported Things
 
-### Blinds1
+This binding currently supports the following things / message types:
+
+ * [blinds1 - RFXCOM Blinds1 Actuator](#blinds1---rfxcom-blinds1-actuator)
+ * [chime - RFXCOM Chime](#chime---rfxcom-chime)
+ * [currentenergy - RFXCOM CurrentEnergy Actuator](#currentenergy---rfxcom-currentenergy-actuator)
+ * [curtain1 - RFXCOM Curtain1 Actuator](#curtain1---rfxcom-curtain1-actuator)
+ * [datetime - RFXCOM Date/time sensor](#datetime---rfxcom-datetime-sensor)
+ * [energy - RFXCOM Energy Sensor](#energy---rfxcom-energy-sensor)
+ * [humidity - RFXCOM Humidity Sensor](#humidity---rfxcom-humidity-sensor)
+ * [lighting1 - RFXCOM Lighting1 Actuator](#lighting1---rfxcom-lighting1-actuator)
+ * [lighting2 - RFXCOM Lighting2 Actuator](#lighting2---rfxcom-lighting2-actuator)
+ * [lighting4 - RFXCOM Lighting4 Actuator](#lighting4---rfxcom-lighting4-actuator)
+ * [lighting5 - RFXCOM Lighting5 Actuator](#lighting5---rfxcom-lighting5-actuator)
+ * [lighting6 - RFXCOM Lighting6 Actuator](#lighting6---rfxcom-lighting6-actuator)
+ * [rain - RFXCOM Rain Sensor](#rain---rfxcom-rain-sensor)
+ * [rfy - RFXCOM Rfy Actuator](#rfy---rfxcom-rfy-actuator)
+ * [security1 - RFXCOM Security1 Sensor](#security1---rfxcom-security1-sensor)
+ * [temperaturehumiditybarometric - RFXCOM Temperature-Humidity-Barometric Sensor](#temperaturehumiditybarometric---rfxcom-temperature-humidity-barometric-sensor)
+ * [temperaturehumidity - RFXCOM Temperature-Humidity Sensor](#temperaturehumidity---rfxcom-temperature-humidity-sensor)
+ * [temperaturerain - RFXCOM Temperature-Rain Sensor](#temperaturerain---rfxcom-temperature-rain-sensor)
+ * [temperature - RFXCOM Temperature Sensor](#temperature---rfxcom-temperature-sensor)
+ * [thermostat1 - RFXCOM Thermostat1 Sensor](#thermostat1---rfxcom-thermostat1-sensor)
+ * [undecoded - RFXCOM Undecoded RF Messages](#undecoded---rfxcom-undecoded-rf-messages)
+ * [uv - RFXCOM UV/Temperature Sensor](#uv---rfxcom-uvtemperature-sensor)
+ * [wind - RFXCOM Wind Sensor](#wind---rfxcom-wind-sensor)
+
+### blinds1 - RFXCOM Blinds1 Actuator
+
+A Blinds1 device.
 
 #### Channels
 
-| name         | Channel Type           | Item type     | Remarks |
-|--------------|------------------------|---------------|---------|
-| command      | command                | Switch        |         |
-| shutter      | shutter                | Rollershutter |         |
-| signalLevel  | system.signal-strength | Number        |         |
-| batteryLevel | system.battery-level   | Number        |         |
-| lowBattery   | system.signal-strength | Switch        |         |
+| Name         | Channel Type           | Item Type     | Remarks          |
+|--------------|------------------------|---------------|------------------|
+| command      | command                | Switch        | Command          |
+| shutter      | shutter                | Rollershutter | Shutter          |
+| signalLevel  | system.signal-strength | Number        | QualityOfService |
+| batteryLevel | system.battery-level   | Number        | Battery          |
+| lowBattery   | system.low-battery     | Switch        | Battery          |
 
-#### Configuration options:
+ * command
+    * Command channel
 
- * deviceId
- * subType
+ * shutter
+    * Shutter channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id + unit code, separated by dot. Example 23455.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
     * T0 - RollerTrol, Hasta new
     * T1 - Hasta old
     * T2 - A-OK RF01
-    * T3 - A-OK AC114 / AC123
+    * T3 - A-OK AC114/AC123
     * T4 - Raex YR1326
     * T5 - Media Mount
-    * T6 - DC106 / Rohrmotor24-RMF / Yooda
+    * T6 - DC106/Rohrmotor24-RMF/Yooda
     * T7 - Forest
     * T8 - Chamberlain CS4330CN
 
-#### Examples
 
-tbd
+### chime - RFXCOM Chime
 
-### Lighting 4
+A Chime device.
 
 #### Channels
 
-| name         | Channel Type           | Item type | Remarks |
-|--------------|------------------------|-----------|---------|
-| command      | command                | Switch    |         |
-| commandId    | commandId              | Number    |         |
-| signalLevel  | system.signal-strength | Number    |         |
+| Name        | Channel Type           | Item Type | Remarks          |
+|-------------|------------------------|-----------|------------------|
+| chimeSound  | chimesound             | Number    | Chime Sound      |
+| signalLevel | system.signal-strength | Number    | QualityOfService |
 
-#### Configuration options:
+ * chimeSound
+    * Chime Sound (not all devices support multiple sounds)
 
- * deviceId
- * subType
-    * PT2262
- * pulse
- * onCommandId
- * offCommandId
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 2983
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * BYRONSX - Byron SX
+    * BYRONMP001 - Byron MP001
+    * SELECTPLUS - SelectPlus
+    * SELECTPLUS3 - SelectPlus3
+    * ENVIVO - Envivo
+
+
+### currentenergy - RFXCOM CurrentEnergy Actuator
+
+A CurrentEnergy device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| channel1Amps | instantamp             | Number    | Instant Amp      |
+| channel2Amps | instantamp             | Number    | Instant Amp      |
+| channel3Amps | instantamp             | Number    | Instant Amp      |
+| totalUsage   | totalusage             | Number    | Total Usage      |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * channel1Amps
+    * Instant current in Amperes
+
+ * channel2Amps
+    * Instant current in Amperes
+
+ * channel3Amps
+    * Instant current in Amperes
+
+ * totalUsage
+    * Used energy in Watt hours
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 47104
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * ELEC4 - OWL - CM180i
+
+
+### curtain1 - RFXCOM Curtain1 Actuator
+
+A Curtain1 device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type     | Remarks          |
+|--------------|------------------------|---------------|------------------|
+| command      | command                | Switch        | Command          |
+| shutter      | shutter                | Rollershutter | Shutter          |
+| signalLevel  | system.signal-strength | Number        | QualityOfService |
+| batteryLevel | system.battery-level   | Number        | Battery          |
+| lowBattery   | system.low-battery     | Switch        | Battery          |
+
+ * command
+    * Command channel
+
+ * shutter
+    * Shutter channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * House code + unit code, separated by dot. Example A.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * HARRISON - Harrison Curtain
+
+
+### datetime - RFXCOM Date/time sensor
+
+A DateTime device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| dateTime     | datetime               | DateTime  | DateTime         |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * dateTime
+    * DateTime channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Device id, example 47360
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * RTGR328N - Oregon RTGR328N
+
+
+### energy - RFXCOM Energy Sensor
+
+A Energy device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks            |
+|--------------|------------------------|-----------|--------------------|
+| instantPower | instantpower           | Number    | Instant Power      |
+| totalUsage   | totalusage             | Number    | Total Usage        |
+| instantAmp   | instantamp             | Number    | Instant Amp        |
+| totalAmpHour | totalamphour           | Number    | Total Ampere-hours |
+| signalLevel  | system.signal-strength | Number    | QualityOfService   |
+| batteryLevel | system.battery-level   | Number    | Battery            |
+| lowBattery   | system.low-battery     | Switch    | Battery            |
+
+ * instantPower
+    * Instant power consumption in Watts
+
+ * totalUsage
+    * Used energy in Watt hours
+
+ * instantAmp
+    * Instant current in Amperes
+
+ * totalAmpHour
+    * Used "energy" in ampere-hours
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 5693
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * ELEC2 - CM119/160
+    * ELEC3 - CM180
+
+
+### humidity - RFXCOM Humidity Sensor
+
+A Humidity device.
+
+#### Channels
+
+| Name           | Channel Type           | Item Type | Remarks          |
+|----------------|------------------------|-----------|------------------|
+| humidity       | humidity               | Number    | Humidity         |
+| humidityStatus | humiditystatus         | String    | Humidity Status  |
+| signalLevel    | system.signal-strength | Number    | QualityOfService |
+| batteryLevel   | system.battery-level   | Number    | Battery          |
+| lowBattery     | system.low-battery     | Switch    | Battery          |
+
+ * humidity
+    * Relative humidity level in percentages
+
+ * humidityStatus
+    * Current humidity status
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 5693
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * HUM1 - LaCrosse TX3
+    * HUM2 - LaCrosse WS2300
+
+
+### lighting1 - RFXCOM Lighting1 Actuator
+
+A Lighting1 device.
+
+#### Channels
+
+| Name        | Channel Type           | Item Type | Remarks          |
+|-------------|------------------------|-----------|------------------|
+| command     | command                | Switch    | Command          |
+| contact     | contact                | Contact   | Contact          |
+| signalLevel | system.signal-strength | Number    | QualityOfService |
+
+ * command
+    * Command channel
+
+ * contact
+    * Contact channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Device Id. House code + unit code, separated by dot. Example A.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * X10 - X10 lighting
+    * ARC - ARC
+    * AB400D - ELRO AB400D (Flamingo)
+    * WAVEMAN - Waveman
+    * EMW200 - Chacon EMW200
+    * IMPULS - IMPULS
+    * RISINGSUN - RisingSun
+    * PHILIPS - Philips SBC
+    * ENERGENIE - Energenie ENER010
+    * ENERGENIE\_5 - Energenie 5-gang
+    * COCO - COCO GDR2-2000R
+    * HQ\_COCO20 - HQ COCO-20
+
+
+### lighting2 - RFXCOM Lighting2 Actuator
+
+A Lighting2 device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| command      | command                | Switch    | Command          |
+| contact      | contact                | Contact   | Contact          |
+| dimmingLevel | dimminglevel           | Dimmer    | Dimming Level    |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+
+ * command
+    * Command channel
+
+ * contact
+    * Contact channel
+
+ * dimmingLevel
+    * Dimming level channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Remote/switch/unit Id + unit code, separated by dot. Example 8773718.10
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * AC - AC
+    * HOME\_EASY\_EU - HomeEasy EU
+    * ANSLUT - ANSLUT
+    * KAMBROOK - Kambrook RF3672
+
+
+### lighting4 - RFXCOM Lighting4 Actuator
+
+A Lighting4 device.
+
+#### Channels
+
+| Name        | Channel Type           | Item Type | Remarks          |
+|-------------|------------------------|-----------|------------------|
+| command     | command                | Switch    | Command          |
+| commandId   | commandId              | Number    | Command ID       |
+| signalLevel | system.signal-strength | Number    | QualityOfService |
+
+ * command
+    * Command channel
+
+ * commandId
+    * Command channel, ID of the channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Device Id. Example 3456
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * PT2262 - PT2262
+
+ * pulse - Pulse length
+    * Pulse length of the device
+
+ * onCommandId - On command
+    * Specifies command to be send when ON must be transmitted
+
+    * 0 - OFF (value 0)
+    * 1 - ON (value 1)
+    * 2 - OFF (value 2)
+    * 3 - ON (value 3)
+    * 4 - OFF (value 4)
+    * 5 - ON (value 5)
+    * 6 - value 5
+    * 7 - ON (value 7)
+    * 8 - value 8
+    * 9 - ON (value 9)
+    * 10 - value 10
+    * 11 - value 11
+    * 12 - ON (value 12)
+    * 13 - value 13
+    * 14 - value 14
+    * 15 - value 15
+
+ * offCommandId - Off command
+    * Specifies command to be send when OFF must be transmitted
+
+    * 0 - OFF (value 0)
+    * 1 - ON (value 1)
+    * 2 - OFF (value 2)
+    * 3 - ON (value 3)
+    * 4 - OFF (value 4)
+    * 5 - ON (value 5)
+    * 6 - value 5
+    * 7 - ON (value 7)
+    * 8 - value 8
+    * 9 - ON (value 9)
+    * 10 - value 10
+    * 11 - value 11
+    * 12 - ON (value 12)
+    * 13 - value 13
+    * 14 - value 14
+    * 15 - value 15
 
 #### Examples
 
@@ -274,3 +704,616 @@ rule "Set random relay variations"
         SwitchCommandId.sendCommand((Math::random * 15.9).intValue)
 end
 ```
+
+### lighting5 - RFXCOM Lighting5 Actuator
+
+A Lighting5 device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| command      | command                | Switch    | Command          |
+| contact      | contact                | Contact   | Contact          |
+| dimmingLevel | dimminglevel           | Dimmer    | Dimming Level    |
+| mood         | mood                   | Number    | Mood             |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+
+ * command
+    * Command channel
+
+ * contact
+    * Contact channel
+
+ * dimmingLevel
+    * Dimming level channel
+
+ * mood
+    * Mood channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Remote/switch/unit Id + unit code, separated by dot. Example 10001.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * AOKE - Aoke Relay
+    * AVANTEK - Avantek
+    * BBSB\_NEW - BBSB new types
+    * CONRAD\_RSL2 - Conrad RSL2
+    * EMW100 - EMW100 GAO/Everflourish
+    * EURODOMEST - Eurodomest
+    * IT - IT
+    * KANGTAI - Kangtai, Cotech
+    * LIGHTWAVERF - LightwaveRF, Siemens
+    * LIVOLO - Livolo Dimmer or On/Off 1-3
+    * LIVOLO\_APPLIANCE - Livolo Appliance On/Off 1-10
+    * MDREMOTE - MDREMOTE LED dimmer v106
+    * MDREMOTE\_107 - MDREMOTE v107
+    * MDREMOTE\_108 - MDREMOTE v108, EKAB-10KRF
+    * RGB\_TRC02 - RGB TRC02 (2 batt)
+    * RGB\_TRC02\_2 - RGB TRC02\_2 (3 batt)
+
+
+### lighting6 - RFXCOM Lighting6 Actuator
+
+A Lighting6 device.
+
+#### Channels
+
+| Name        | Channel Type           | Item Type | Remarks          |
+|-------------|------------------------|-----------|------------------|
+| command     | command                | Switch    | Command          |
+| contact     | contact                | Contact   | Contact          |
+| signalLevel | system.signal-strength | Number    | QualityOfService |
+
+ * command
+    * Command channel
+
+ * contact
+    * Contact channel
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Remote/switch/unit Id + group code + unit code, separated by dot. Example 100.A.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * BLYSS - Blyss
+
+
+### rain - RFXCOM Rain Sensor
+
+A Rain device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| rainRate     | rainrate               | Number    | Rain Rate        |
+| rainTotal    | raintotal              | Number    | Rain Total       |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * rainRate
+    * Rain fall rate in millimeters per hour
+
+ * rainTotal
+    * Total rain in millimeters
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * RAIN1 - RGR126/682/918/928
+    * RAIN2 - PCR800
+    * RAIN3 - TFA
+    * RAIN4 - UPM RG700
+    * RAIN5 - WS2300
+    * RAIN6 - La Crosse TX5
+
+
+### rfy - RFXCOM Rfy Actuator
+
+A Rfy device.
+
+#### Channels
+
+| Name            | Channel Type           | Item Type     | Remarks              |
+|-----------------|------------------------|---------------|----------------------|
+| command         | command                | Switch        | Command              |
+| program         | command                | Switch        | Send Program Command |
+| shutter         | shutter                | Rollershutter | Shutter              |
+| venetianBlind   | venetianBlind          |               |                      |
+| sunWindDetector | command                | Switch        | Sun+wind detector    |
+| signalLevel     | system.signal-strength | Number        | QualityOfService     |
+
+ * command
+    * Command channel
+
+ * program
+    * Sends a program command to pair with a device when switched from off to on.
+
+ * shutter
+    * Shutter channel
+
+ * venetianBlind
+    * 
+
+ * sunWindDetector
+    * Enable the sun+wind detector.
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Unit Id + unit code, separated by dot. Example 100.1
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * RFY - RFY
+    * RFY\_EXT - RFY Ext
+
+
+### security1 - RFXCOM Security1 Sensor
+
+A Security1 device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| status       | status                 | String    | Status           |
+| contact      | contact                | Contact   | Contact          |
+| motion       | motion                 | Switch    | Motion           |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * status
+    * Status channel
+
+ * contact
+    * Contact channel
+
+ * motion
+    * Motion detection sensor state
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Remote/sensor Id. Example 10001
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * X10\_SECURITY - X10 security door/window sensor
+    * X10\_SECURITY\_MOTION - X10 security motion sensor
+    * X10\_SECURITY\_REMOTE - X10 security remote (no alive packets)
+    * KD101 - KD101 (no alive packets)
+    * VISONIC\_POWERCODE\_SENSOR\_PRIMARY\_CONTACT - Visonic PowerCode door/window sensor – primary contact (with alive packets)
+    * VISONIC\_POWERCODE\_MOTION - Visonic PowerCode motion sensor (with alive packets)
+    * VISONIC\_CODESECURE - Visonic CodeSecure (no alive packets)
+    * VISONIC\_POWERCODE\_SENSOR\_AUX\_CONTACT - Visonic PowerCode door/window sensor – auxiliary contact (no alive packets)
+    * MEIANTECH - Meiantech
+    * SA30 - SA30 (no alive packets)
+
+
+### temperaturehumiditybarometric - RFXCOM Temperature-Humidity-Barometric Sensor
+
+A Temperature-Humidity-Barometric device.
+
+#### Channels
+
+| Name           | Channel Type           | Item Type | Remarks          |
+|----------------|------------------------|-----------|------------------|
+| temperature    | temperature            | Number    | Temperature      |
+| humidity       | humidity               | Number    | Humidity         |
+| humidityStatus | humiditystatus         | String    | Humidity Status  |
+| pressure       | pressure               |           |                  |
+| forecast       | forecast               |           |                  |
+| signalLevel    | system.signal-strength | Number    | QualityOfService |
+| batteryLevel   | system.battery-level   | Number    | Battery          |
+| lowBattery     | system.low-battery     | Switch    | Battery          |
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * humidity
+    * Relative humidity level in percentages
+
+ * humidityStatus
+    * Current humidity status
+
+ * pressure
+    * 
+
+ * forecast
+    * 
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 59648
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * THB1 - BTHR918, BTHGN129
+    * THB2 - BTHR918N, BTHR968
+
+
+### temperaturehumidity - RFXCOM Temperature-Humidity Sensor
+
+A Temperature-Humidity device.
+
+#### Channels
+
+| Name           | Channel Type           | Item Type | Remarks          |
+|----------------|------------------------|-----------|------------------|
+| temperature    | temperature            | Number    | Temperature      |
+| humidity       | humidity               | Number    | Humidity         |
+| humidityStatus | humiditystatus         | String    | Humidity Status  |
+| signalLevel    | system.signal-strength | Number    | QualityOfService |
+| batteryLevel   | system.battery-level   | Number    | Battery          |
+| lowBattery     | system.low-battery     | Switch    | Battery          |
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * humidity
+    * Relative humidity level in percentages
+
+ * humidityStatus
+    * Current humidity status
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * TH1 - THGN122/123, THGN132, THGR122/228/238/268
+    * TH2 - THGR810, THGN800
+    * TH3 - RTGR328
+    * TH4 - THGR328
+    * TH5 - WTGR800
+    * TH6 - THGR918/928, THGRN228, THGN500
+    * TH7 - TFA TS34C, Cresta
+    * TH8 - WT260,WT260H,WT440H,WT450,WT450H
+    * TH9 - Viking 02035,02038 (02035 has no humidity), Proove TSS320, 311501
+    * TH10 - Rubicson
+    * TH11 - EW109
+    * TH12 - Imagintronix/Opus XT300 Soil sensor
+    * TH13 - Alecto WS1700 and compatibles
+
+
+### temperaturerain - RFXCOM Temperature-Rain Sensor
+
+A Temperature-Rain device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| temperature  | temperature            | Number    | Temperature      |
+| rainTotal    | raintotal              | Number    | Rain Total       |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * rainTotal
+    * Total rain in millimeters
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * WS1200 - WS1200
+
+
+### temperature - RFXCOM Temperature Sensor
+
+A Temperature device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| temperature  | temperature            | Number    | Temperature      |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * TEMP1 - THR128/138, THC138
+    * TEMP2 - THC238/268,THN132,THWR288,THRN122,THN122,AW129/131
+    * TEMP3 - THWR800
+    * TEMP4 - RTHN318
+    * TEMP5 - La Crosse TX2, TX3, TX4, TX17
+    * TEMP6 - TS15C. UPM temp only
+    * TEMP7 - Viking 02811, Proove TSS330, 311346
+    * TEMP8 - La Crosse WS2300
+    * TEMP9 - Rubicson
+    * TEMP10 - TFA 30.3133
+    * TEMP11 - WT0122
+
+
+### thermostat1 - RFXCOM Thermostat1 Sensor
+
+A Thermostat1 device.
+
+#### Channels
+
+| Name        | Channel Type           | Item Type | Remarks          |
+|-------------|------------------------|-----------|------------------|
+| contact     | contact                | Contact   | Contact          |
+| setpoint    | setpoint               | Number    | Set-point        |
+| temperature | temperature            | Number    | Temperature      |
+| signalLevel | system.signal-strength | Number    | QualityOfService |
+
+ * contact
+    * Contact channel
+
+ * setpoint
+    * Requested temperature
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * DIGIMAX - Digimax, TLX7506
+    * DIGIMAX\_SHORT - Digimax with short format (no set point)
+
+
+### undecoded - RFXCOM Undecoded RF Messages
+
+Any messages that RFXCOM can receive but not decode.
+
+#### Channels
+
+| Name       | Channel Type | Item Type | Remarks     |
+|------------|--------------|-----------|-------------|
+| rawMessage | rawmessage   | String    | Raw Message |
+| rawPayload | rawpayload   | String    | Raw Payload |
+
+ * rawMessage
+    * Hexadecimal representation of undecoded RFXCOM messages including header and payload
+
+ * rawPayload
+    * Hexadecimal representation of payload of undecoded RFXCOM messages
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Undecoded items cannot provide a device ID, so this value is always UNDECODED.
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * AC - AC
+    * ARC - ARC
+    * ATI - ATI
+    * HIDEKI\_UPM - Hideki, UPM
+    * LACROSSE\_VIKING - La Crosse, Viking
+    * AD - AD
+    * MERTIK - Mertik Maxitrol Fireplace controllers
+    * OREGON1 - Oregon Scientific 1
+    * OREGON2 - Oregon Scientific 2
+    * OREGON3 - Oregon Scientific 3
+    * PROGUARD - ProGuard
+    * VISONIC - Visonic
+    * NEC - NEC
+    * FS20 - FS20
+    * RESERVED - Reserved
+    * BLINDS - Blinds
+    * RUBICSON - Rubicson
+    * AE - AE
+    * FINE\_OFFSET - Fine Offset
+    * RGB - RGB
+    * RTS - RTS
+    * SELECT\_PLUS - Select Plus
+    * HOME\_CONFORT - Home Confort
+
+
+### uv - RFXCOM UV/Temperature Sensor
+
+A UV/Temperature device.
+
+#### Channels
+
+| Name         | Channel Type           | Item Type | Remarks          |
+|--------------|------------------------|-----------|------------------|
+| uv           | uv                     |           |                  |
+| temperature  | temperature            | Number    | Temperature      |
+| signalLevel  | system.signal-strength | Number    | QualityOfService |
+| batteryLevel | system.battery-level   | Number    | Battery          |
+| lowBattery   | system.low-battery     | Switch    | Battery          |
+
+ * uv
+    * 
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 56923
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * UV1 - UVN128, UV138
+    * UV2 - UVN800
+    * UV3 - TFA
+
+
+### wind - RFXCOM Wind Sensor
+
+A Wind device.
+
+#### Channels
+
+| Name             | Channel Type           | Item Type | Remarks            |
+|------------------|------------------------|-----------|--------------------|
+| avgWindSpeed     | windspeed              | Number    | Average Wind Speed |
+| windSpeed        | windspeed              | Number    | Wind Gust          |
+| windDirection    | winddirection          | Number    | Wind Direction     |
+| temperature      | temperature            | Number    | Temperature        |
+| chillTemperature | temperature            | Number    | Chill Temperature  |
+| signalLevel      | system.signal-strength | Number    | QualityOfService   |
+| batteryLevel     | system.battery-level   | Number    | Battery            |
+| lowBattery       | system.low-battery     | Switch    | Battery            |
+
+ * avgWindSpeed
+    * Average wind speed in meters per second
+
+ * windSpeed
+    * Wind gust in meters per second
+
+ * windDirection
+    * Wind direction in degrees
+
+ * temperature
+    * Current temperature in degree Celsius
+
+ * chillTemperature
+    * Chill temperature in degree Celsius
+
+ * signalLevel
+    * Represents signal strength of a device as a Number with values 0, 1, 2, 3 or 4; 0 being worst strength and 4 being best strength.
+
+ * batteryLevel
+    * Represents the battery level as a percentage (0-100%). Bindings for things supporting battery level in a different format (eg 4 levels) should convert to a percentage to provide a consistent battery level reading.
+
+ * lowBattery
+    * Represents a low battery warning with possible values on/off.
+
+#### Configuration Options
+
+ * deviceId - Device Id
+    * Sensor Id. Example 2983
+
+ * subType - Sub Type
+    * Specifies device sub type.
+
+    * WIND1 - WTGR800
+    * WIND2 - WGR800
+    * WIND3 - STR918, WGR918, WGR928
+    * WIND4 - TFA
+    * WIND5 - UPM WDS500
+    * WIND6 - WS2300
+    * WIND7 - Alecto WS4500, Auriol H13726, Hama EWS1500, Meteoscan W155/W160, Ventus WS155
+
+
