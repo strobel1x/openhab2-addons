@@ -146,17 +146,17 @@ final class PacketBuilder {
 
         if (!command.isBroadcast()) {
             if (luminary == null) {
-                throw new NullPointerException("luminary must be set for non-broadcast commands");
+                throw new IllegalArgumentException("luminary must be set for non-broadcast commands");
             }
         }
         if (command == Command.LIGHT_COLOR && rgb == null) {
-            throw new NullPointerException("rgb not set for rgb command");
+            throw new IllegalArgumentException("rgb not set for rgb command");
         }
         if (command == Command.LIGHT_LUMINANCE && luminance == null) {
-            throw new NullPointerException("luminance not set for luminance command");
+            throw new IllegalArgumentException("luminance not set for luminance command");
         }
         if (command == Command.LIGHT_TEMPERATURE && temperature == null) {
-            throw new NullPointerException("temperature not set for temperature command");
+            throw new IllegalArgumentException("temperature not set for temperature command");
         }
     }
 
